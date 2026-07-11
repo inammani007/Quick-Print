@@ -30,8 +30,8 @@ jobs:
           KEY_PASSWORD_SECRET: ${{ secrets.KEY_PASSWORD }}
         run: |
           # Resolve passwords (use secret if exists, otherwise fallback to default values)
-          STORE_PASS="${STORE_PASSWORD_SECRET:-default_store_password}"
-          KEY_PASS="${KEY_PASSWORD_SECRET:-default_key_password}"
+          STORE_PASS="${STORE_PASSWORD_SECRET:-quickprint_store}"
+          KEY_PASS="${KEY_PASSWORD_SECRET:-quickprint_key}"
           
           # Export them to GITHUB_ENV so subsequent Gradle steps can access them as env vars
           echo "STORE_PASSWORD=$STORE_PASS" >> $GITHUB_ENV

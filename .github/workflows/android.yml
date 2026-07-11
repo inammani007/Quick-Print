@@ -1,26 +1,45 @@
-name: Android CI
+name: Android CI Build
 
 on:
   push:
-    branches: [ "main" ]
+    branches: [ "main", "master", "develop" ]
   pull_request:
-    branches: [ "main" ]
+    branches: [ "main", "master", "develop" ]
 
 jobs:
   build:
-
+    name: Build and Test
     runs-on: ubuntu-latest
 
     steps:
-    - uses: actions/checkout@v4
-    - name: set up JDK 11
-      uses: actions/setup-java@v4
-      with:
-        java-version: '11'
-        distribution: 'temurin'
-        cache: gradle
+      # Step 1: Check out the repository code
+      - name: Checkout Code
+        uses: actions/checkout@v4
 
-    - name: Grant execute permission for gradlew
-      run: chmod +x gradlew
-    - name: Build with Gradle
-      run: ./gradlew build
+      # Step 2: Set up Java JDK 17 (Required for modern Android Gradle Plugin / toolchains)
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+          cache: 'gradle' # Automatically caches Gradle dependencies to speed up future runs
+
+      # Step 3: Grant execute permission for the Gradle Wrapper
+      - name: Make Gradle Wrapper Executable
+        run: chmod +x gradlew
+
+      # Step 4: Run unit and Robolectric tests to verify app logic and code quality
+      - name: Run Unit Tests
+        run: ./gradlew :app:testDebugUnitTest
+
+      # Step 5: Build the Debug APK ready for sideloading
+      - name: Build Debug APK
+        run: ./gradlew :app:assembleDebug
+
+      # Step 6: Upload the generated APK as a build artifact in GitHub Actions
+      - name: Upload Built APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: app-debug-apk
+          path: app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error

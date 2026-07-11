@@ -3,13 +3,13 @@ name: Build and Release APK
 on:
   push:
     tags:
-      - 'v*' # Triggers the workflow when you push a tag like v1.0.0
-  workflow_dispatch: # Allows you to trigger the workflow manually from the Actions tab
+      - 'v*' # Triggers the workflow when you push a version tag, e.g., v1.0.0, v2.1.0
 
 jobs:
-  build:
-    name: Build & Release Release APK
+  release:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write # Required to create a release and upload assets
 
     steps:
       - name: Checkout Code
@@ -22,27 +22,36 @@ jobs:
           java-version: '17'
           cache: 'gradle'
 
-      - name: Decode or Generate Keystore
+      - name: Prepare Signing Key and Environment
         env:
           KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
-          STORE_PASSWORD: ${{ secrets.STORE_PASSWORD || 'temporaryPassword123' }}
-          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD || 'temporaryPassword123' }}
+          STORE_PASSWORD_SECRET: ${{ secrets.STORE_PASSWORD }}
+          KEY_PASSWORD_SECRET: ${{ secrets.KEY_PASSWORD }}
         run: |
-          if [ -z "$KEYSTORE_BASE64" ]; then
-            echo "⚠️ KEYSTORE_BASE64 secret is missing. Generating a temporary self-signed keystore for testing..."
-            keytool -genkey -v \
+          # Resolve passwords (use secret if exists, otherwise fallback to default values)
+          STORE_PASS="${STORE_PASSWORD_SECRET:-default_store_password}"
+          KEY_PASS="${KEY_PASSWORD_SECRET:-default_key_password}"
+          
+          # Export them to GITHUB_ENV so subsequent Gradle steps can access them as env vars
+          echo "STORE_PASSWORD=$STORE_PASS" >> $GITHUB_ENV
+          echo "KEY_PASSWORD=$KEY_PASS" >> $GITHUB_ENV
+          
+          if [ -n "$KEYSTORE_BASE64" ]; then
+            echo "Decoding release keystore from secrets..."
+            echo "$KEYSTORE_BASE64" | base64 --decode > my-upload-key.jks
+          else
+            echo "No release keystore secret found. Generating a temporary keystore for building..."
+            keytool -genkeypair -v \
               -keystore my-upload-key.jks \
+              -alias upload \
               -keyalg RSA \
               -keysize 2048 \
               -validity 10000 \
-              -alias upload \
-              -storepass "$STORE_PASSWORD" \
-              -keypass "$KEY_PASSWORD" \
-              -dname "CN=QuickPrint, OU=AIStudio, O=Google, L=Mountain View, S=California, C=US"
-          else
-            echo "✅ KEYSTORE_BASE64 secret found. Decoding to my-upload-key.jks..."
-            echo "$KEYSTORE_BASE64" | base64 --decode > my-upload-key.jks
+              -storepass "$STORE_PASS" \
+              -keypass "$KEY_PASS" \
+              -dname "CN=QuickPrint, O=AI Studio, C=US"
           fi
+
       - name: Generate Gradle Wrapper
         # Fixes the 'gradlew not found' error by generating the wrapper using the runner's pre-installed Gradle
         run: gradle wrapper
@@ -51,9 +60,6 @@ jobs:
         run: chmod +x gradlew
 
       - name: Build Release APK
-        env:
-          STORE_PASSWORD: ${{ secrets.STORE_PASSWORD || 'temporaryPassword123' }}
-          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD || 'temporaryPassword123' }}
         run: ./gradlew assembleRelease
 
       - name: Upload APK Artifact

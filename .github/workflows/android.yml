@@ -43,7 +43,10 @@ jobs:
             echo "✅ KEYSTORE_BASE64 secret found. Decoding to my-upload-key.jks..."
             echo "$KEYSTORE_BASE64" | base64 --decode > my-upload-key.jks
           fi
-
+      - name: Generate Gradle Wrapper
+        # Fixes the 'gradlew not found' error by generating the wrapper using the runner's pre-installed Gradle
+        run: gradle wrapper
+  
       - name: Make Gradle Wrapper Executable
         run: chmod +x gradlew
 

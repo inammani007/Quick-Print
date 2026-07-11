@@ -1,23 +1,19 @@
-name: Create Android Release
+name: Build and Release APK
 
 on:
   push:
     tags:
-      - 'v*' # Triggers the workflow whenever you push a tag like v1.0.0, v1.2.1, etc.
-  workflow_dispatch: # Allows you to trigger the build manually from the Actions tab
+      - 'v*' # Triggers the workflow when you push a tag like v1.0.0
+  workflow_dispatch: # Allows you to trigger the workflow manually from the Actions tab
 
 jobs:
-  release:
-    name: Build and Publish Release
+  build:
+    name: Build & Release Release APK
     runs-on: ubuntu-latest
-    permissions:
-      contents: write # CRITICAL: Grants permission to create releases and upload files
 
     steps:
-      - name: Checkout Source Code
+      - name: Checkout Code
         uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
 
       - name: Set up JDK 17
         uses: actions/setup-java@v4
@@ -26,29 +22,50 @@ jobs:
           java-version: '17'
           cache: 'gradle'
 
-      - name: Generate Gradle Wrapper
-        # Fixes the 'gradlew not found' error by generating the wrapper using the runner's pre-installed Gradle
-        run: gradle wrapper
+      - name: Decode or Generate Keystore
+        env:
+          KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
+          STORE_PASSWORD: ${{ secrets.STORE_PASSWORD || 'temporaryPassword123' }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD || 'temporaryPassword123' }}
+        run: |
+          if [ -z "$KEYSTORE_BASE64" ]; then
+            echo "⚠️ KEYSTORE_BASE64 secret is missing. Generating a temporary self-signed keystore for testing..."
+            keytool -genkey -v \
+              -keystore my-upload-key.jks \
+              -keyalg RSA \
+              -keysize 2048 \
+              -validity 10000 \
+              -alias upload \
+              -storepass "$STORE_PASSWORD" \
+              -keypass "$KEY_PASSWORD" \
+              -dname "CN=QuickPrint, OU=AIStudio, O=Google, L=Mountain View, S=California, C=US"
+          else
+            echo "✅ KEYSTORE_BASE64 secret found. Decoding to my-upload-key.jks..."
+            echo "$KEYSTORE_BASE64" | base64 --decode > my-upload-key.jks
+          fi
 
       - name: Make Gradle Wrapper Executable
         run: chmod +x gradlew
 
       - name: Build Release APK
-        # Compiles the production build of your application
+        env:
+          STORE_PASSWORD: ${{ secrets.STORE_PASSWORD || 'temporaryPassword123' }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD || 'temporaryPassword123' }}
         run: ./gradlew assembleRelease
 
-      - name: Gather Built APKs
-        # Gathers any compiled APK files from build outputs and prepares them for the release
-        run: |
-          mkdir -p release-artifacts
-          find app/build/outputs/apk/ -name "*.apk" -exec cp {} release-artifacts/ \;
-
-      - name: Create GitHub Release & Upload Assets
-        uses: softprops/action-gh-release@v2
+      - name: Upload APK Artifact
+        uses: actions/upload-artifact@v4
         with:
-          files: release-artifacts/*.apk
+          name: release-apk
+          path: app/build/outputs/apk/release/app-release.apk
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        if: startsWith(github.ref, 'refs/tags/')
+        with:
+          files: app/build/outputs/apk/release/app-release.apk
+          name: Release ${{ github.ref_name }}
           draft: false
           prerelease: false
-          generate_release_notes: true # Automatically summarizes git commits since last tag
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }} # Provided automatically by GitHub Actions
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

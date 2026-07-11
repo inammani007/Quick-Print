@@ -61,7 +61,10 @@ jobs:
         run: chmod +x gradlew
 
       - name: Build Release APK
-        run: ./gradlew assembleRelease
+        env:
+          STORE_PASSWORD: ${{ secrets.STORE_PASSWORD || 'quickprint_store' }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD || 'quickprint_key' }}
+        run: ./gradlew assembleRelease -Pandroid.injected.signing.store.password=$STORE_PASSWORD -Pandroid.injected.signing.key.password=$KEY_PASSWORD
 
       - name: Upload APK Artifact
         uses: actions/upload-artifact@v4

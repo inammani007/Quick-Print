@@ -1,0 +1,6 @@
+{
+  "name": "Quick Print",
+  "description": "Immediately forward shared PDFs and photos to the system's native Print dialog.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
